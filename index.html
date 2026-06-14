@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📸 BMTF Photo Share</title>
+    
+    <!-- Librairie pour compresser les images -->
+    <script src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.2/dist/browser-image-compression.js"></script>
+    
+    <!-- Firebase SDKs (Version Compat pour HTML simple) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; padding: 20px; text-align: center; }
+        h1 { color: #333; margin-bottom: 10px; }
+        p { color: #666; margin-bottom: 30px; }
+        
+        #upload-zone {
+            border: 2px dashed #007bff;
+            border-radius: 10px;
+            padding: 40px;
+            background: white;
+            max-width: 500px;
+            margin: 0 auto 40px;
+            cursor: pointer;
+        }
+        
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .gallery img {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .gallery img:hover { transform: scale(1.05); }
+        
+        .loader { display: none; color: #007bff; font-weight: bold; margin-top: 10px; }
+        .btn-upload { padding: 12px 24px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
+        .btn-upload:disabled { background: #ccc; }
+    </style>
+</head>
+<body>
+
+    <h1>📸 Partage ta photo !</h1>
+    <p>Scanne, choisis, et ta photo apparaît ici pour tout le monde.</p>
+
+    <div id="upload-zone">
+        <h3>Tape ici pour ajouter une photo</h3>
+        <button id="btn-upload" class="btn-upload">Choisir une photo</button>
+        <input type="file" id="file-input" style="display: none;" accept="image/*">
+        <div id="loader" class="loader">Envoi en cours... (Compression active)</div>
+    </div>
+
+    <div class="gallery" id="gallery"></div>
+
+    <script>
+        // --- 1. CONFIGURATION CLOUDINARY ---
+        const CLOUDINARY_CLOUD_NAME = 'dgnviiipg';
+        const CLOUDINARY_UPLOAD_PRESET = 'BMTF30062026';
+
+        // --- 2. CONFIGURATION FIREBASE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyD0wbiDNKnY_FtrswSxzYd6ZI6QKUEQCfA",
+            authDomain: "bmtf30062026.firebaseapp.com",
+            databaseURL: "https://bmtf30062026-default-rtdb.firebaseio.com",
+            projectId: "bmtf30062026",
+            storageBucket: "bmtf30062026.firebasestorage.app",
+            messagingSenderId: "596311625871",
+            appId: "1:596311625871:web:a57f4606e3f41c388820fa"
+        };
+
+        // Initialisation Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const photosRef = database.ref('photos');
+
+        // Éléments DOM
+        const fileInput = document.getElementById('file-input');
+        const btnUpload = document.getElementById('btn-upload');
+        const loader = document.getElementById('loader');
+        const gallery = document.getElementById('gallery');
+
+        // Ouvrir le sélecteur
+        btnUpload.addEventListener('click', () => fileInput.click());
+
+        // Gestion de l'upload
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files;
+            if (!file) return;
+
+            loader.style.display = 'block';
+            btnUpload.disabled = true;
+            btnUpload.innerText = "Envoi...";
+
+            try {
+                // 1. Compression (Max 500 Ko)
+                const options = {
+                    maxSizeMB: 0.5,
+                    maxWidthOrHeight: 1920,
+                    useWebWorker: true
+                };
+                const compressedFile = await imageCompression(file, options);
+                
+                // 2. Upload Cloudinary
+                const formData = new FormData();
+                formData.append('file', compressedFile);
+                formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+                const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.secure_url) {
+                    // 3. Enregistrer l'URL dans Firebase
+                    const newPhotoRef = photosRef.push();
+                    await newPhotoRef.set({
+                        url: data.secure_url,
+                        timestamp: Date.now()
+                    });
+                    alert('Photo ajoutée !');
+                } else {
+                    alert('Erreur Cloudinary : ' + (data.error?.message || 'Inconnue'));
+                }
+
+            } catch (error) {
+                console.error(error);
+                alert('Erreur : ' + error.message);
+            } finally {
+                loader.style.display = 'none';
+                btnUpload.disabled = false;
+                btnUpload.innerText = "Choisir une photo";
+                fileInput.value = '';
+            }
+        });
+
+        // Écouteur de nouveautés (Temps réel)
+        photosRef.on('child_added', (snapshot) => {
+            const photo = snapshot.val();
+            if (photo && photo.url) {
+                addToGallery(photo.url);
+            }
+        });
+
+        // Afficher une image
+        function addToGallery(url) {
+            const img = document.createElement('img');
+            img.src = url;
+            gallery.prepend(img);
+        }
+    </script>
+</body>
+</html>
