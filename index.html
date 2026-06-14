@@ -46,16 +46,16 @@
   </div>
 
   <script>
-    // --- 1. CONFIGURATION FIREBASE ---
-    // Remplacez les valeurs ci-dessous par celles de votre projet Firebase
+    // --- 1. CONFIGURATION FIREBASE (VOS CLÉS EXACTES) ---
     const firebaseConfig = {
-      apiKey: "AIzaSyDxxxxxxxxxxxxxxxxxxxxxxxxxx", 
-      authDomain: "BMTF30062026.firebaseapp.com",
-      databaseURL: "https://bmtf30062026-default-rtdb.europe-west1.firebasedatabase.app",
-      projectId: "BMTF30062026",
-      storageBucket: "BMTF30062026.appspot.com",
-      messagingSenderId: "123456789",
-      appId: "1:123456789:web:abcdef123456"
+      apiKey: "AIzaSyD0wbiDNKnY_FtrswSxzYd6ZI6QKUEQCfA",
+      authDomain: "bmtf30062026.firebaseapp.com",
+      projectId: "bmtf30062026",
+      storageBucket: "bmtf30062026.firebasestorage.app",
+      messagingSenderId: "596311625871",
+      appId: "1:596311625871:web:a57f4606e3f41c388820fa",
+      // URL de la base de données déduite. Si cela échoue, remplacez par l'URL exacte de votre console Firebase
+      databaseURL: "https://bmtf30062026-default-rtdb.europe-west1.firebasedatabase.app"
     };
 
     // Initialisation de Firebase
@@ -63,8 +63,12 @@
     const db = firebase.database();
 
     // --- 2. CONFIGURATION CLOUDINARY ---
-    const CLOUDINARY_CLOUD_NAME = "dxxxxxxx"; // REMPLACEZ PAR VOTRE CLOUD NAME (ex: dxxxxxxx)
-    const CLOUDINARY_UPLOAD_PRESET = "BMTF30062026";
+    // ⚠️ IMPORTANT : Remplacez "VOTRE_CLOUD_NAME_ICI" par votre vrai Cloud Name (ex: d123456)
+    // Vous le trouvez sur votre tableau de bord Cloudinary en haut à gauche.
+    const CLOUDINARY_CLOUD_NAME = "dgnviiipg"; 
+    
+    // Assurez-vous que le preset "BMTF30062026" existe dans Cloudinary (Upload Presets)
+    const CLOUDINARY_UPLOAD_PRESET = "BMTF30062026"; 
     const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
 
     // --- 3. LOGIQUE D'UPLOAD ---
@@ -90,4 +94,84 @@
           const scale = maxWidth / img.width;
           canvas.width = maxWidth;
           canvas.height = img.height * scale;
-          ctx.drawImage(img, 0, 0
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+          canvas.toBlob(function(blob) {
+            statusDiv.textContent = "Téléversement vers Cloudinary...";
+            
+            const formData = new FormData();
+            formData.append('file', blob);
+            formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+            fetch(CLOUDINARY_UPLOAD_URL, {
+              method: 'POST',
+              body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+              if (data.error) {
+                throw new Error(data.error.message);
+              }
+              statusDiv.textContent = "Enregistrement dans la base de données...";
+              
+              // Enregistrement dans Firebase (dans le dossier 'photos')
+              const newPhotoRef = db.ref('photos').push();
+              newPhotoRef.set({
+                url: data.secure_url,
+                timestamp: Date.now()
+              })
+              .then(() => {
+                statusDiv.textContent = "Photo ajoutée avec succès !";
+                statusDiv.className = "success";
+                photoInput.value = ''; // Reset input
+                setTimeout(() => { statusDiv.textContent = ""; }, 3000);
+              })
+              .catch(error => {
+                console.error("Erreur Firebase:", error);
+                statusDiv.textContent = "Erreur: " + error.message;
+                statusDiv.className = "error";
+              });
+            })
+            .catch(error => {
+              console.error("Erreur Cloudinary:", error);
+              statusDiv.textContent = "Erreur: " + error.message;
+              statusDiv.className = "error";
+            });
+          }, 'image/jpeg', 0.7);
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // --- 4. LOGIQUE D'AFFICHAGE (TEMPS RÉEL) ---
+    const photosRef = db.ref('photos');
+
+    photosRef.on('value', (snapshot) => {
+      const data = snapshot.val();
+      galleryDiv.innerHTML = ''; 
+
+      if (!data) {
+        galleryDiv.innerHTML = '<div class="loading">Aucune photo pour le moment.</div>';
+        return;
+      }
+
+      Object.keys(data).forEach(key => {
+        const photo = data[key];
+        if (photo && photo.url) {
+          const card = document.createElement('div');
+          card.className = 'photo-card';
+          
+          const img = document.createElement('img');
+          img.src = photo.url;
+          img.alt = "Photo de la fête";
+          img.loading = "lazy";
+          
+          card.appendChild(img);
+          galleryDiv.appendChild(card);
+        }
+      });
+    });
+  </script>
+</body>
+</html>
