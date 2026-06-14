@@ -37,7 +37,7 @@
     <label for="photoInput" class="custom-file-upload">
       📷 Choisir des photos à partager dans mon repertoire photos
     </label>
-    <input type="file" id="photoInput" accept="image/*">
+    <input type="file" id="photoInput" accept="image/*" multiple>
     <div id="status"></div>
   </div>
 
@@ -77,71 +77,74 @@
     const galleryDiv = document.getElementById('gallery');
 
     photoInput.addEventListener('change', function(event) {
-      const file = event.target.files[0];
-      if (!file) return;
+      const files = Array.from(event.target.files);
+      if (!files.length) return;
 
-      statusDiv.textContent = "Compression de l'image...";
-      statusDiv.className = "loading";
+      statusDiv.className = 'loading';
+      let uploaded = 0;
 
-      // Compression de l'image
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const img = new Image();
-        img.onload = function() {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          const maxWidth = 800; // Taille max pour le web
-          const scale = maxWidth / img.width;
-          canvas.width = maxWidth;
-          canvas.height = img.height * scale;
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      function uploadFile(file, index) {
+        statusDiv.textContent = `Traitement ${index+1}/${files.length}...`;
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+              const canvas = document.createElement('canvas');
+              const ctx = canvas.getContext('2d');
+              const maxWidth = 800;
+              const scale = maxWidth / img.width;
+              canvas.width = maxWidth;
+              canvas.height = img.height * scale;
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-          canvas.toBlob(function(blob) {
-            statusDiv.textContent = "Téléversement vers Cloudinary...";
-            
-            const formData = new FormData();
-            formData.append('file', blob);
-            formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+              canvas.toBlob(function(blob) {
+                statusDiv.textContent = `Téléversement ${index+1}/${files.length}...`;
+                const formData = new FormData();
+                formData.append('file', blob);
+                formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
 
-            fetch(CLOUDINARY_UPLOAD_URL, {
-              method: 'POST',
-              body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-              if (data.error) {
-                throw new Error(data.error.message);
-              }
-              statusDiv.textContent = "Enregistrement dans la base de données...";
-              
-              // Enregistrement dans Firebase (dans le dossier 'photos')
-              const newPhotoRef = db.ref('photos').push();
-              newPhotoRef.set({
-                url: data.secure_url,
-                timestamp: Date.now()
-              })
-              .then(() => {
-                statusDiv.textContent = "Photo ajoutée avec succès !";
-                statusDiv.className = "success";
-                photoInput.value = ''; // Reset input
-                setTimeout(() => { statusDiv.textContent = ""; }, 3000);
-              })
-              .catch(error => {
-                console.error("Erreur Firebase:", error);
-                statusDiv.textContent = "Erreur: " + error.message;
-                statusDiv.className = "error";
-              });
-            })
-            .catch(error => {
-              console.error("Erreur Cloudinary:", error);
-              statusDiv.textContent = "Erreur: " + error.message;
-              statusDiv.className = "error";
-            });
-          }, 'image/jpeg', 0.7);
-        };
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
+                fetch(CLOUDINARY_UPLOAD_URL, {
+                  method: 'POST',
+                  body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                  if (data.error) throw new Error(data.error.message);
+                  const newPhotoRef = db.ref('photos').push();
+                  return newPhotoRef.set({ url: data.secure_url, timestamp: Date.now() });
+                })
+                .then(() => {
+                  uploaded++;
+                  resolve();
+                })
+                .catch(reject);
+              }, 'image/jpeg', 0.7);
+            };
+            img.src = e.target.result;
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+
+      (async () => {
+        for (let i = 0; i < files.length; i++) {
+          try {
+            await uploadFile(files[i], i);
+          } catch (err) {
+            console.error('Erreur upload:', err);
+            statusDiv.textContent = 'Erreur: ' + (err.message || err);
+            statusDiv.className = 'error';
+            return;
+          }
+        }
+        if (uploaded === files.length) {
+          statusDiv.textContent = 'Toutes les photos ont été ajoutées !';
+          statusDiv.className = 'success';
+          photoInput.value = '';
+          setTimeout(() => { statusDiv.textContent = ''; }, 3000);
+        }
+      })();
     });
 
     // --- 4. LOGIQUE D'AFFICHAGE (TEMPS RÉEL) ---
