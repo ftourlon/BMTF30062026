@@ -77,7 +77,7 @@
     const galleryDiv = document.getElementById('gallery');
 
     photoInput.addEventListener('change', function(event) {
-      const file = event.target.files;
+      const file = event.target.files[0];
       if (!file) return;
 
       statusDiv.textContent = "Compression de l'image...";
