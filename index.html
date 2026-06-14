@@ -13,14 +13,19 @@
     .custom-file-upload:hover { border-color: #007bff; color: #007bff; background-color: #f8f9fa; }
     #status { margin-top: 15px; font-weight: bold; min-height: 24px; }
     #gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; max-width: 1000px; margin: 0 auto; }
-    .photo-card { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); aspect-ratio: 1; }
+    .photo-card { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); aspect-ratio: 1; animation: popIn 0.3s ease-out; }
     .photo-card img { width: 100%; height: 100%; object-fit: cover; }
     .loading { color: #007bff; }
     .error { color: #dc3545; }
     .success { color: #28a745; }
+    
+    @keyframes popIn {
+      from { transform: scale(0.8); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
   </style>
   
-  <!-- SDK Firebase Compat (pour fonctionner sans système de modules complexe) -->
+  <!-- SDK Firebase Compat -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 </head>
@@ -38,3 +43,51 @@
 
   <div id="gallery">
     <div class="loading">Chargement des photos...</div>
+  </div>
+
+  <script>
+    // --- 1. CONFIGURATION FIREBASE ---
+    // Remplacez les valeurs ci-dessous par celles de votre projet Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyDxxxxxxxxxxxxxxxxxxxxxxxxxx", 
+      authDomain: "BMTF30062026.firebaseapp.com",
+      databaseURL: "https://bmtf30062026-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "BMTF30062026",
+      storageBucket: "BMTF30062026.appspot.com",
+      messagingSenderId: "123456789",
+      appId: "1:123456789:web:abcdef123456"
+    };
+
+    // Initialisation de Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    // --- 2. CONFIGURATION CLOUDINARY ---
+    const CLOUDINARY_CLOUD_NAME = "dxxxxxxx"; // REMPLACEZ PAR VOTRE CLOUD NAME (ex: dxxxxxxx)
+    const CLOUDINARY_UPLOAD_PRESET = "BMTF30062026";
+    const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+
+    // --- 3. LOGIQUE D'UPLOAD ---
+    const photoInput = document.getElementById('photoInput');
+    const statusDiv = document.getElementById('status');
+    const galleryDiv = document.getElementById('gallery');
+
+    photoInput.addEventListener('change', function(event) {
+      const file = event.target.files;
+      if (!file) return;
+
+      statusDiv.textContent = "Compression de l'image...";
+      statusDiv.className = "loading";
+
+      // Compression de l'image
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          const maxWidth = 800; // Taille max pour le web
+          const scale = maxWidth / img.width;
+          canvas.width = maxWidth;
+          canvas.height = img.height * scale;
+          ctx.drawImage(img, 0, 0
