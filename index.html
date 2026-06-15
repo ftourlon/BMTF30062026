@@ -8,6 +8,25 @@
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; text-align: center; }
     h1 { color: #333; margin-bottom: 20px; }
     #upload-section { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 500px; margin: 0 auto 30px auto; }
+    
+    /* Bouton de téléchargement */
+    #download-btn {
+      display: none; /* Caché par défaut, s'affiche quand il y a des photos */
+      background-color: #28a745;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 15px;
+      transition: background 0.3s;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    #download-btn:hover { background-color: #218838; }
+    #download-btn:disabled { background-color: #ccc; cursor: not-allowed; }
+
     input[type="file"] { display: none; }
     .custom-file-upload { border: 2px dashed #ccc; display: inline-block; padding: 12px 24px; cursor: pointer; border-radius: 6px; color: #666; font-weight: bold; transition: all 0.3s; }
     .custom-file-upload:hover { border-color: #007bff; color: #007bff; background-color: #f8f9fa; }
@@ -28,6 +47,10 @@
   <!-- SDK Firebase Compat -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  
+  <!-- AJOUT DES LIBRAIRIES POUR LE ZIP -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 </head>
 <body>
 
@@ -35,10 +58,16 @@
 
   <div id="upload-section">
     <label for="photoInput" class="custom-file-upload">
-      📷 Choisir des photos à partager dans mon repertoire photos
+      📷 Choisir des photos à partager
     </label>
     <input type="file" id="photoInput" accept="image/*" multiple>
+    
     <div id="status"></div>
+    
+    <!-- NOUVEAU BOUTON DE TÉLÉCHARGEMENT -->
+    <button id="download-btn" onclick="downloadGallery()">
+      📥 Télécharger la galerie (ZIP)
+    </button>
   </div>
 
   <div id="gallery">
@@ -46,7 +75,7 @@
   </div>
 
   <script>
-    // --- 1. CONFIGURATION FIREBASE (VOS CLÉS EXACTES) ---
+    // --- 1. CONFIGURATION FIREBASE ---
     const firebaseConfig = {
       apiKey: "AIzaSyD0wbiDNKnY_FtrswSxzYd6ZI6QKUEQCfA",
       authDomain: "bmtf30062026.firebaseapp.com",
@@ -54,28 +83,27 @@
       storageBucket: "bmtf30062026.firebasestorage.app",
       messagingSenderId: "596311625871",
       appId: "1:596311625871:web:a57f4606e3f41c388820fa",
-      // URL de la base de données déduite. Si cela échoue, remplacez par l'URL exacte de votre console Firebase
       databaseURL: "https://bmtf30062026-default-rtdb.europe-west1.firebasedatabase.app"
     };
 
-    // Initialisation de Firebase
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
     // --- 2. CONFIGURATION CLOUDINARY ---
-    // ⚠️ IMPORTANT : Remplacez "VOTRE_CLOUD_NAME_ICI" par votre vrai Cloud Name (ex: d123456)
-    // Vous le trouvez sur votre tableau de bord Cloudinary en haut à gauche.
     const CLOUDINARY_CLOUD_NAME = "dgnviiipg"; 
-    
-    // Assurez-vous que le preset "BMTF30062026" existe dans Cloudinary (Upload Presets)
     const CLOUDINARY_UPLOAD_PRESET = "BMTF30062026"; 
     const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
 
-    // --- 3. LOGIQUE D'UPLOAD ---
+    // --- 3. VARIABLES GLOBALES ---
     const photoInput = document.getElementById('photoInput');
     const statusDiv = document.getElementById('status');
     const galleryDiv = document.getElementById('gallery');
+    const downloadBtn = document.getElementById('download-btn');
+    
+    // Variable pour stocker les URLs actuelles (mise à jour par Firebase)
+    let currentPhotoUrls = [];
 
+    // --- 4. LOGIQUE D'UPLOAD (inchangée) ---
     photoInput.addEventListener('change', function(event) {
       const files = Array.from(event.target.files);
       if (!files.length) return;
@@ -147,21 +175,26 @@
       })();
     });
 
-    // --- 4. LOGIQUE D'AFFICHAGE (TEMPS RÉEL) ---
+    // --- 5. LOGIQUE D'AFFICHAGE ET MISE A JOUR LISTE URL ---
     const photosRef = db.ref('photos');
 
     photosRef.on('value', (snapshot) => {
       const data = snapshot.val();
       galleryDiv.innerHTML = ''; 
+      currentPhotoUrls = []; // Reset la liste
 
       if (!data) {
         galleryDiv.innerHTML = '<div class="loading">Aucune photo pour le moment.</div>';
+        downloadBtn.style.display = 'none'; // Cacher le bouton si pas de photos
         return;
       }
 
       Object.keys(data).forEach(key => {
         const photo = data[key];
         if (photo && photo.url) {
+          // Ajout à la liste pour le backup
+          currentPhotoUrls.push(photo.url);
+
           const card = document.createElement('div');
           card.className = 'photo-card';
           
@@ -174,7 +207,60 @@
           galleryDiv.appendChild(card);
         }
       });
+
+      // Afficher le bouton si au moins une photo existe
+      if (currentPhotoUrls.length > 0) {
+        downloadBtn.style.display = 'inline-block';
+        downloadBtn.textContent = `📥 Télécharger la galerie (${currentPhotoUrls.length} photos)`;
+      } else {
+        downloadBtn.style.display = 'none';
+      }
     });
+
+    // --- 6. FONCTION DE TÉLÉCHARGEMENT ZIP ---
+    function downloadGallery() {
+      if (currentPhotoUrls.length === 0) return;
+
+      const zip = new JSZip();
+      const folder = zip.folder("photos_fete");
+      
+      statusDiv.textContent = "Préparation du ZIP... Patientez.";
+      statusDiv.className = 'loading';
+      downloadBtn.disabled = true;
+
+      const promises = currentPhotoUrls.map((url, index) => {
+        return fetch(url)
+          .then(response => response.blob())
+          .then(blob => {
+            // Générer un nom de fichier unique (ex: photo_1.jpg, photo_2.jpg)
+            const ext = url.split('.').pop().split('?') || 'jpg';
+            const fileName = `photo_${index + 1}.${ext}`;
+            folder.file(fileName, blob);
+          })
+          .catch(err => console.error("Erreur téléchargement image:", err));
+      });
+
+      Promise.all(promises)
+        .then(() => {
+          statusDiv.textContent = "Création du fichier final...";
+          return zip.generateAsync({ type: "blob" });
+        })
+        .then(content => {
+          statusDiv.textContent = "Téléchargement en cours...";
+          saveAs(content, "galerie_bmtf_30062026.zip");
+          statusDiv.textContent = "Téléchargement terminé !";
+          statusDiv.className = 'success';
+          setTimeout(() => { statusDiv.textContent = ''; statusDiv.className = ''; }, 3000);
+        })
+        .catch(err => {
+          console.error(err);
+          statusDiv.textContent = "Erreur lors de la création du ZIP.";
+          statusDiv.className = 'error';
+        })
+        .finally(() => {
+          downloadBtn.disabled = false;
+        });
+    }
   </script>
 </body>
 </html>
